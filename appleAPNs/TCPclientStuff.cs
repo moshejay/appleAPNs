@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Windows.Forms;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -20,7 +21,7 @@ namespace appleAPNs
         public string displayStuff;
         public byte[] theNotification;
         public bool doQuit,doDisconnect,doConnect;
-        public bool startWriting, stopReading, gotDisplayStuff;
+        public bool startWriting, stopReading, gotDisplayStuff,weAreQuiting;
         public bool tcpIsConnected;
         public TcpClient client;
         private SslStream ourSSLstream;
@@ -55,18 +56,22 @@ namespace appleAPNs
             string certifPath = "c:\\aps_development.cer"; //path to the actual file..this is the development certificate not the mpos certificate,
             // ..but the mpos certificate has been installed into the certificate path on the pc using mmc.exe & snap-in
             string certifPwd = "";// the pwd is blank
-            X509Certificate2 myCertif = new X509Certificate2(certifPath, certifPwd);
-            X509Certificate2Collection myCertifCollection = new X509Certificate2Collection(myCertif);
+            X509Certificate2 myCertif;
+            X509Certificate2Collection myCertifCollection;
             try
             {
+                myCertif = new X509Certificate2(certifPath, certifPwd);
+                myCertifCollection = new X509Certificate2Collection(myCertif);
                 if (ourSSLstream != null) 
                     ourSSLstream.Close();
                 if (client != null) client.Close();
                 client = new TcpClient();
                 client.Connect("gateway.sandbox.push.apple.com", 2195);
+//newer way                client.Connect("api.development.push.apple.com", 443);
                 aNS = client.GetStream(); // only needed here, unlike in coms & decoder
                 ourSSLstream = new SslStream(aNS,false,new RemoteCertificateValidationCallback (ValidateServerCertificate),null);
-                ourSSLstream.AuthenticateAsClient("gateway.sandbox.push.apple.com",myCertifCollection,SslProtocols.Tls,true);
+//                ourSSLstream.AuthenticateAsClient("api.development.push.apple.com", myCertifCollection, SslProtocols.Tls, true);
+                ourSSLstream.AuthenticateAsClient("gateway.sandbox.push.apple.com", myCertifCollection, SslProtocols.Tls, true);
                 if(ourSSLstream.IsMutuallyAuthenticated == false)
                 {
                     gotDisplayStuff = true;
@@ -76,6 +81,14 @@ namespace appleAPNs
                 int lc = ourSSLstream.ReadTimeout;
                 ourSSLstream.ReadTimeout = 100;
                 return true;
+            }
+            catch (System.Security.Cryptography.CryptographicException e)
+            {
+                MessageBox.Show("The file c:\\aaps_development.cer is either missing or corrupted.\nThe exception is:\n" + e.Message,"Cryptographic Error");
+            }
+            catch(System.IO.IOException e)
+            {
+                MessageBox.Show("The Apple APN certificate is either missing or corrupted.\nReimport it into Certificates/Personal/Certificates.\nIt is in the file devAPNScertandkey.p12\nThe exception is " + e.Message, "Authentication/Cryptographic Error");
             }
             catch (AuthenticationException e)
             {

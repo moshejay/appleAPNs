@@ -1,4 +1,7 @@
-﻿using System;
+﻿/************************************
+ * 29/02/16 changed deviceDataArray size from 50 to 150 cos deviceID now 64 bytes not 32.
+ * **********************************/
+using System;
 using System.Windows.Forms;
 using System.Collections.Generic;
 using System.Linq;
@@ -28,7 +31,7 @@ namespace appleAPNs
 
         public OurConfig()
         {
-            deviceDataArray = new byte[50];
+            deviceDataArray = new byte[150];
             urlForDeviceTokens = "https://holisticsazure.blob.core.windows.net/devicetokens";
             ourConfigFile = System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments) + "\\appleAPNsConfig.txt";
 
@@ -86,6 +89,8 @@ namespace appleAPNs
             string  merchNum, termNum, deviceToken, deviceID;
             int[] poses;
             int lc,cl = 0;
+            char achar;
+
             poses = new int[5];
             poses[0] = 1;
             for (cl = 1,lc = 0; lc < dataLen; lc++)

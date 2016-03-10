@@ -1,4 +1,7 @@
-﻿using System;
+﻿/************************************
+ * 29/02/16 changed maxTCPinBuffer & tcpInBuffer size from 50 to 150 cos deviceID now 64 bytes not 32.
+ * **********************************/
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -23,6 +26,7 @@ namespace appleAPNs
     {
         public ServerStepToDo nextStep;
         public PacketStateReached packetState;
+        public bool weAreQuitting;
         
         /*** cmds for the tcp server ***/
         public TcpListener theListener;
@@ -39,7 +43,7 @@ namespace appleAPNs
         {
             scratch = new byte[1];
             scratch[0] = 255;
-            maxTCPinBuffer = 50;
+            maxTCPinBuffer = 150;
             tcpInBuffer = new byte[maxTCPinBuffer];
             tcpPacket = new byte[1024];
             tcpInCount = tcpPacketPos = 0;

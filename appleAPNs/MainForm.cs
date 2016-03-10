@@ -69,17 +69,26 @@ namespace appleAPNs
         {
             if (ourTcpClient != null)
             {
-                if (ourTcpClient.ThreadState == ThreadState.Running)
+                if (ourTcpClient.ThreadState == ThreadState.Running || ourTcpClient.ThreadState == ThreadState.WaitSleepJoin)
                 {
+                    theTcpClient.weAreQuiting = true;
+                    if (ourTcpClient.ThreadState == ThreadState.WaitSleepJoin)
+                    {
+                        ourTcpClient.Interrupt();
+                        Thread.Sleep(50);
+                    }
                     theTcpClient.stopReading = true;
+                    Thread.Sleep(50);
                     theTcpClient.doDisconnect = true;
+                    Thread.Sleep(50);
                     while (theTcpClient.tcpIsConnected == true) Thread.Sleep(50);
                     theTcpClient.doQuit = true;
-                    while (ourTcpClient.ThreadState == ThreadState.Running) Thread.Sleep(50);
+                    while (ourTcpClient.ThreadState != ThreadState.Stopped) Thread.Sleep(50);
                 }
             }
             if (ourTcpServer != null)
             {
+                theTcpServer.weAreQuitting = true;
                 if (ourTcpServer.ThreadState == ThreadState.WaitSleepJoin)
                 {
                     ourTcpServer.Interrupt();
@@ -87,9 +96,11 @@ namespace appleAPNs
                 }
                 if (ourTcpServer.ThreadState == ThreadState.Running)
                 {
-                    theTcpServer.nextStep =  ServerStepToDo.QuitListening;
-                    while (ourTcpServer.ThreadState == ThreadState.Running) Thread.Sleep(50);
+                    theTcpServer.nextStep = ServerStepToDo.QuitListening;
+                    while (ourTcpServer.ThreadState != ThreadState.Stopped) Thread.Sleep(50);
                 }
+                else
+                    theTcpClient.weAreQuiting = true;
             }
             return;
         }
@@ -215,12 +226,12 @@ namespace appleAPNs
             if (theTcpClient.tcpIsConnected == false)
             {
                 theTcpClient.doConnect = true;
-                TCPconnectDisconnectBtn.Text = "Disconnect";
+                TCPconnectDisconnectBtn.Text = "Disconnect from APN";
             }
             else
             {
                 theTcpClient.doDisconnect = true;
-                TCPconnectDisconnectBtn.Text = "Connect";
+                TCPconnectDisconnectBtn.Text = "Connect to APN";
             }
         }
         //-----------------------------------------------------------------------------------
@@ -234,6 +245,11 @@ namespace appleAPNs
             theTcpClient.gotDisplayStuff = false;
             return;
         }
+        private void CallBackFromTCPclientThread1()
+        {
+            TCPconnectDisconnectBtn.Text = "Connect to APN";
+            return;
+        }
         /*******************************************
         * separate thread
         * note issue with canInvoke for the lbl control...there needs to be an intervening window screen event before this can be
@@ -244,16 +260,27 @@ namespace appleAPNs
             bool contin = true;
             Thread.Sleep(100); // time for the window to be up
             SetTCPThreadCallback tcpCallBack = new SetTCPThreadCallback(CallBackFromTCPclientThread);
+            SetTCPThreadCallback tcpConnectCallBack = new SetTCPThreadCallback(CallBackFromTCPclientThread1);
           
             while (contin) // do forever
             {
+                try
+                {
+                    if(!theTcpClient.weAreQuiting)
+                        Thread.Sleep(50);
+                }
+                catch (System.Threading.ThreadInterruptedException e)
+                {
+                    // we are closing....  MessageBox.Show("SocketException: {0}", e.Message);
+                } 
                 if (theTcpClient.gotDisplayStuff)
                 {
                     Invoke(tcpCallBack, new object[] { });  // for some reason this can't be invoked twice
                 }
                 if (theTcpClient.doConnect) // connect to the APN...we want to keep the session alive
                 {
-                    theTcpClient.Connect();
+                    if(theTcpClient.Connect() == false)
+                        Invoke(tcpConnectCallBack, new object[] { });  // for some reason this can't be invoked twice
                     theTcpClient.doConnect = false;
                 }
                 if (theTcpClient.stopReading == false)
@@ -308,7 +335,15 @@ namespace appleAPNs
             textToWrite = "";
             while (contin)
             {
-                switch(theTcpServer.nextStep)
+                try {
+                    if(!theTcpServer.weAreQuitting)
+                        Thread.Sleep(50);
+                }
+                catch (System.Threading.ThreadInterruptedException e)
+                {
+                    // we are closing....  MessageBox.Show("SocketException: {0}", e.Message);
+                } 
+                switch (theTcpServer.nextStep)
                 {
                     case ServerStepToDo.Setup:
                         if (theTcpServer.SetUpListener(ourConfig) == true) // resets startListening
@@ -357,25 +392,25 @@ namespace appleAPNs
                     case ServerStepToDo.CheckForData:
                         if (theTcpServer.GetSocketData() == true)
                         {
-                            if(theTcpServer.packetState == PacketStateReached.GotEnd)
+                            if (theTcpServer.packetState == PacketStateReached.GotEnd)
                             {
                                 textToWrite = "<-" + Encoding.ASCII.GetString(theTcpServer.tcpPacket, 1, theTcpServer.tcpPacketPos - 1) + "\r\n";
                                 Invoke(gg, new object[] { });
                                 ourConfig.StoreDeviceData(theTcpServer.tcpPacket, theTcpServer.tcpPacketPos);
                                 theTcpServer.packetState = PacketStateReached.None;
-                                if(theTcpServer.tcpPacket[0] == 7)
+                                if (theTcpServer.tcpPacket[0] == 7)
                                 {
                                     theTcpServer.nextStep = ServerStepToDo.SendData;
                                 }
                             }
-/*
-                            if (theTcpServer.tcpInCount > 0)
-                            {
-                                textToWrite = "<-" + Encoding.ASCII.GetString(theTcpServer.tcpInBuffer, 0, theTcpServer.tcpInCount);
-                                theTcpServer.tcpInCount = 0;
-                                Invoke(gg, new object[] { });
-                            }
- */ 
+                            /*
+                                                    if (theTcpServer.tcpInCount > 0)
+                                                    {
+                                                        textToWrite = "<-" + Encoding.ASCII.GetString(theTcpServer.tcpInBuffer, 0, theTcpServer.tcpInCount);
+                                                        theTcpServer.tcpInCount = 0;
+                                                        Invoke(gg, new object[] { });
+                                                    }
+                            */
                         }
                         break;
                     case ServerStepToDo.SendData:
@@ -546,6 +581,7 @@ namespace appleAPNs
              displayRTB.Text += "";
              while (contin)
              {
+                 Thread.Sleep(100);                 
                  appleFeedback.ReadPort();
                  if (appleFeedback.gotDisplayStuff)
                  {
